@@ -8,5 +8,5 @@ initdb:
 
 # start all dolphinscheduler server, use profile all
 .PHONY: start
-cli:
+start:
 	docker-compose --profile all up -d
