@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# use this script to test if a given TCP host/ port are available
-# script is from https://github.com/vishnubob/wait-for-it/blob/ed77b63706ea721766a62ff22d3a251d8b4a6a30/wait-for-it.sh
+# Use this script to test if a given TCP host/port are available
 
 WAITFORIT_cmdname=${0##*/}
 
@@ -37,7 +36,7 @@ wait_for()
             nc -z $WAITFORIT_HOST $WAITFORIT_PORT
             WAITFORIT_result=$?
         else
-            (echo > /dev/tcp/$WAITFORIT_HOST/$WAITFORIT_PORT) >/dev/null 2>&1
+            (echo -n > /dev/tcp/$WAITFORIT_HOST/$WAITFORIT_PORT) >/dev/null 2>&1
             WAITFORIT_result=$?
         fi
         if [[ $WAITFORIT_result -eq 0 ]]; then

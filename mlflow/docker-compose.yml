@@ -1,95 +1,67 @@
-# /**
-#  *******************************************************************************
-#  ** Created by Tinz Twins
-#  **
-#  ** Copyright © 2022 tinztwins.de. All rights reserved.
-#  **
-#  ** Redistributions of source code must retain the above copyright notice,
-#  ** this condition and the following disclaimer.
-#  **
-#  ** This software is provided by the copyright holder and contributors
-#  ** and any warranties related to this software are DISCLAIMED.
-#  ** The copyright owner or contributors be NOT LIABLE for any damages caused
-#  ** by use of this software.
-#  *******************************************************************************
-#  */
-
 version: '3.7'
+
 services:
-  sftp:
-    image: ${SFTP_IMAGE}
-    container_name: sftp
-    restart: always
-    ports:
-      - "${SFTP_PORT}:22"
-    command:
-      - ${SFTP_USERNAME}:${SFTP_PASSWORD}:1001::${MLFLOW_ARTIFACT_STORE}   # syntax: user:password[:e][:uid[:gid[:dir1[,dir2]...]]]
-    volumes:
-      - ./${MLFLOW_ARTIFACT_STORE}:/home/${SFTP_USERNAME}/${MLFLOW_ARTIFACT_STORE}
-      - ./keys/ssh_host_rsa_key.pub:/home/${SFTP_USERNAME}/.ssh/ssh_host_rsa_key.pub:ro
-      - ./keys/ssh_host_ed25519_key.pub:/home/${SFTP_USERNAME}/.ssh/ssh_host_ed25519_key.pub:ro
+    minio:
+        restart: always
+        image: minio/minio@sha256:c8b96517bdf9e133ae722ae4ad25045743087c1ff5098eff3a397a97f845fbf9
+        container_name: mlflow_s3
+        ports:
+            - "9000:9000"
+            - "9001:9001"
+        command: server /data --console-address ':9001' --address ':9000'
+        environment:
+            - MINIO_ROOT_USER=${AWS_ACCESS_KEY_ID}
+            - MINIO_ROOT_PASSWORD=${AWS_SECRET_ACCESS_KEY}
+        volumes:
+            - minio_data:/data
 
-  mlflow:
-    build:
-      context: ./docker/mlflow
-    image: workspace/mlflow
-    container_name: mlflow
-    restart: on-failure
-    ports:
-      - "${MLFLOW_TRACKING_SERVER_PORT}:5000"
-    depends_on:
-      - postgres
-      - sftp
-    volumes:
-      - ./${MLFLOW_ARTIFACT_STORE}:/${MLFLOW_ARTIFACT_STORE}
-      - ./keys/ssh_host_rsa_key:/root/.ssh/ssh_host_rsa_key:ro
-      - ./keys/ssh_host_ed25519_key:/root/.ssh/ssh_host_ed25519_key:ro
-      - ./keys/config:/root/.ssh/config:ro
-    command: >
-      /bin/bash -c "sleep 3
-      && cd /root/.ssh
-      && ssh-keyscan ${SFTP_HOST} >> known_hosts
-      && cd /server
-      && ./wait-for-it.sh ${MLFLOW_BACKEND_STORE}:5432 -t ${WAIT_FOR_IT_TIMEOUT} -- mlflow server
-      --backend-store-uri postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${MLFLOW_BACKEND_STORE}:5432/${POSTGRES_DATABASE}
-      --default-artifact-root sftp://${SFTP_USERNAME}:${SFTP_PASSWORD}@${SFTP_HOST}/${MLFLOW_ARTIFACT_STORE}
-      --host ${MLFLOW_TRACKING_SERVER_HOST}
-      --port 5000"
+    mc:
+        image: minio/mc@sha256:6ffd76764e8ca484de12c6ecaa352db3d8efd5c9d44f393718b29b6600e0a559
+        depends_on:
+            - minio
+        container_name: mc
+        env_file:
+            - .env
+        entrypoint: >
+            /bin/sh -c "
+            /tmp/wait-for-it.sh minio:9000 &&
+            /usr/bin/mc alias set minio http://minio:9000 ${AWS_ACCESS_KEY_ID} ${AWS_SECRET_ACCESS_KEY} &&
+            /usr/bin/mc mb minio/mlflow;
+            exit 0;
+            "
+        volumes:
+            - ./wait-for-it.sh:/tmp/wait-for-it.sh
 
-  postgres:
-    build: ./docker/postgres
-    image: workspace/postgres
-    container_name: postgres
-    restart: always
-    environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_USER: ${POSTGRES_USER}
-    ports:
-      - "${POSTGRES_PORT}:5432"
-    volumes:
-      - ./${POSTGRES_STORE}:/var/lib/postgresql/data
+    db:
+        restart: always
+        image: mysql/mysql-server@sha256:5b40d96b11333570143d98d3a74100fefadb9abb17b27a95dbc9ad33544ec142
+        container_name: mlflow_db
+        ports:
+            - "3306:3306"
+        environment:
+            - MYSQL_DATABASE=${MYSQL_DATABASE}
+            - MYSQL_USER=${MYSQL_USER}
+            - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+            - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+        volumes:
+            - dbdata:/var/lib/mysql
 
-  jupyter:
-    user: root
-    build:
-      context: ./docker/jupyter
-    image: workspace/jupyter
-    container_name: jupyter
-    restart: on-failure
-    ports:
-      - "${JUPYTER_PORT}:8888"
-    depends_on: 
-      - postgres
-      - mlflow
-      - sftp
-    environment:
-      MLFLOW_TRACKING_URI: "http://mlflow:5000"
-      JUPYTER_ENABLE_LAB: ${JUPYTER_ENABLE_LAB}
-      SFTP_HOST: ${SFTP_HOST}
-      JUPYTER_USERNAME: ${JUPYTER_USERNAME}
-      JUPYTER_TOKEN: ${JUPYTER_TOKEN}
-    volumes:
-      - ./notebooks/:/home/${JUPYTER_USERNAME}/work
-      - ./keys/ssh_host_rsa_key:/home/${JUPYTER_USERNAME}/.ssh/ssh_host_rsa_key:ro
-      - ./keys/ssh_host_ed25519_key:/home/${JUPYTER_USERNAME}/.ssh/ssh_host_ed25519_key:ro
-      - ./keys/config:/home/${JUPYTER_USERNAME}/.ssh/config:ro
+    web:
+        restart: always
+        build: ./mlflow
+        image: mlflow_server
+        container_name: mlflow_server
+        depends_on:
+            - mc
+            - db
+        ports:
+            - "5000:5000"
+        environment:
+            - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+            - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+            - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+        command: mlflow server --backend-store-uri mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE} --default-artifact-root s3://mlflow/ --host 0.0.0.0
+
+volumes:
+    dbdata:
+    minio_data:

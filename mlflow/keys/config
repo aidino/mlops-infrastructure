@@ -1,5 +1,0 @@
-Host sftp
-  HostName sftp
-  User mlflowuser
-  PasswordAuthentication yes
-  Port 22
