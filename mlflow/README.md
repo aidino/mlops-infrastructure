@@ -1,83 +1,58 @@
-# MLflow On-Premise Deployment using Docker Compose
-Easily deploy an MLflow tracking server with 1 command.
+# MLFlow Docker Setup [![Actions Status](https://github.com/Toumash/mlflow-docker/workflows/VerifyDockerCompose/badge.svg)](https://github.com/Toumash/mlflow-docker/actions)
 
-MinIO S3 is used as the artifact store and MySQL server is used as the backend store.
+> If you want to boot up mlflow project with one-liner - this repo is for you. 
+> The only requirement is docker installed on your system and we are going to use Bash on linux/windows.
 
-## How to run
+# 🚀 1-2-3! Setup guide 
+1. Configure `.env` file for your choice. You can put there anything you like, it will be used to configure you services
+2. Run `docker compose up`
+3. Open up http://localhost:5000 for MlFlow, and http://localhost:9001/ to browse your files in S3 artifact store
 
-1. Clone (download) this repository
 
-    ```bash
-    git clone https://github.com/sachua/mlflow-docker-compose.git
-    ```
+**👇Video tutorial how to set it up on Microsoft Azure 👇**
 
-2. `cd` into the `mlflow-docker-compose` directory
+[![Youtube tutorial](https://user-images.githubusercontent.com/9840635/144674240-f1ede224-410a-4b77-a7b8-450f45cc79ba.png)](https://www.youtube.com/watch?v=ma5lA19IJRA)
 
-3. Build and run the containers with `docker-compose`
+# Features
+ - One file setup (.env)
+ - Minio S3 artifact store with GUI
+ - MySql mlflow storage
+ - Ready to use bash scripts for python development!
+ - Automatically-created s3 buckets
 
-    ```bash
-    docker-compose up -d --build
-    ```
 
-4. Access MLflow UI with http://localhost:5000
+## How to use in ML development in python
 
-5. Access MinIO UI with http://localhost:9000
+<details>
+<summary>Click to show</summary>
 
-## Containerization
+1. Configure your client-side
 
-The MLflow tracking server is composed of 4 docker containers:
+For running mlflow files you need various environment variables set on the client side. To generate them user the convienience script `./bashrc_install.sh`, which installs it on your system or `./bashrc_generate.sh`, which just displays the config to copy & paste.
 
-* MLflow server
-* MinIO object storage server
-* MySQL database server
+> $ ./bashrc_install.sh   
+> [ OK ] Successfully installed environment variables into your .bashrc!
 
-## Example
+The script installs this variables: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, MLFLOW_S3_ENDPOINT_URL, MLFLOW_TRACKING_URI. All of them are needed to use mlflow from the client-side.
 
-1. Install [conda](https://conda.io/projects/conda/en/latest/user-guide/install/index.html)
+2. Test the pipeline with below command with conda. If you dont have conda installed run with `--no-conda`
 
-2. Install MLflow with extra dependencies, including scikit-learn
+```shell
+mlflow run git@github.com:databricks/mlflow-example.git -P alpha=0.5
+# or
+python ./quickstart/mlflow_tracking.py
+```
 
-    ```bash
-    pip install mlflow[extras]
-    ```
+3. *(Optional)* If you are constantly switching your environment you can use this environment variable syntax
 
-3. Set environmental variables
+```shell
+MLFLOW_S3_ENDPOINT_URL=http://localhost:9000 MLFLOW_TRACKING_URI=http://localhost:5000 mlflow run git@github.com:databricks/mlflow-example.git -P alpha=0.5
+```
 
-    ```bash
-    export MLFLOW_TRACKING_URI=http://localhost:5000
-    export MLFLOW_S3_ENDPOINT_URL=http://localhost:9000
-    ```
-4. Set MinIO credentials
+</details>
+ 
 
-    ```bash
-    cat <<EOF > ~/.aws/credentials
-    [default]
-    aws_access_key_id=minio
-    aws_secret_access_key=minio123
-    EOF
-    ```
+## Licensing
+Copyright (c) 2021 Tomasz Dłuski
 
-5. Train a sample MLflow model
-
-    ```bash
-    mlflow run https://github.com/mlflow/mlflow-example.git -P alpha=0.42
-    ```
-
-    * Note: To fix ModuleNotFoundError: No module named 'boto3'
-
-        ```bash
-        #Switch to the conda env
-        conda env list
-        conda activate mlflow-3eee9bd7a0713cf80a17bc0a4d659bc9c549efac #replace with your own generated mlflow-environment
-        pip install boto3
-        ```
-
- 6. Serve the model (replace with your model's actual path)
-    ```bash
-    mlflow models serve -m S3://mlflow/0/98bdf6ec158145908af39f86156c347f/artifacts/model -p 1234
-    ```
-
- 7. You can check the input with this command
-    ```bash
-    curl -X POST -H "Content-Type:application/json; format=pandas-split" --data '{"columns":["alcohol", "chlorides", "citric acid", "density", "fixed acidity", "free sulfur dioxide", "pH", "residual sugar", "sulphates", "total sulfur dioxide", "volatile acidity"],"data":[[12.8, 0.029, 0.48, 0.98, 6.2, 29, 3.33, 1.2, 0.39, 75, 0.66]]}' http://127.0.0.1:1234/invocations
-    ```
+Licensed under the MIT License (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License by reviewing the file [LICENSE](./LICENSE) in the repository.
