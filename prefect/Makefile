@@ -10,5 +10,5 @@ cli:
 	docker-compose run cli
 
 .PHONY: agent
-cli:
+agent:
 	docker-compose --profile agent up
