@@ -36,7 +36,7 @@ services:
           options:
             tag: efk.kibana
     fluent-bit:
-        image: fluent/fluent-bit:1.8
+        image: fluent/fluent-bit
         command:
           - /fluent-bit/bin/fluent-bit
           - --config=/etc/fluent-bit/fluent-bit.conf
